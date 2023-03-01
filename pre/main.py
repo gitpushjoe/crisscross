@@ -210,7 +210,7 @@ def generate_crossword(base: Crossword, level=0):
         return base
     if base.at_level(level) == base.empty_level():
         rand = 5000 if level == 0 else 15000 # number of words to randomly select from clue_words to test
-        grab = 1500 if level == 0 else 200 # number of highest-scoring words to grab from the random selection
+        grab = 2000 if level == 0 else 200 # number of highest-scoring words to grab from the random selection
         grab = -grab
         
         # if level == 0:
@@ -273,11 +273,11 @@ def generate_crossword(base: Crossword, level=0):
 
 x = Crossword('aaaaaaaaa')
 # print([word in clue_words for word in x.get_all_words()])
-i = 9900
+i = 12038
 while True:
     x = generate_crossword(Crossword.empty_crossword(crossword_size))
     if x.is_valid(clue_words):
         with open('crossword.txt', 'a') as f:
             i += 1
-            print(f'\nCrossword #{i}: \t{x.data}')
+            print(f'\nCrossword #{i:,}: \t{x.data}')
             f.write(x.data + '\n')
