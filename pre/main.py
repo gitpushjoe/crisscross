@@ -27,14 +27,24 @@ class Clue:
 class Crossword:
     data: str
     size: int
+    functional: bool
     empty: ClassVar[str] = '0' # character used to represent empty squares
 
     def __init__(self, data):
-        if (len(data) ** 0.5).is_integer():
-            self.size = int(len(data) ** 0.5)
-            self.data = data
-        else:
-            raise ValueError("Crossword data is not square")
+        self.functional = True
+        if isinstance(data, str):
+            if (len(data) ** 0.5).is_integer():
+                self.size = int(len(data) ** 0.5)
+                self.data = data
+            else:
+                raise ValueError("Crossword data is not square")
+        elif isinstance(data, int):
+            self.size = data
+            self.data = self.empty * data * data
+        elif data is None:
+            self.functional = False
+            self.size = 0
+            self.data = ""
 
     @classmethod
     def empty_crossword(cls, size):
@@ -138,7 +148,7 @@ class Crossword:
         return list(itertools.chain(*self.get_row_words(), *self.get_col_words()))
     
     def is_valid(self, dictionary):
-        return all(word in dictionary for word in self.get_all_words())
+        return False if not self.functional else all(word in dictionary for word in self.get_all_words())
 
 @dataclass
 class CrosswordReference(Crossword):
@@ -175,7 +185,6 @@ if not os.path.exists('clue_words.pickle'):
     print(len(clues))
 clue_words = read_from_file('clue_words.pickle', lambda: set(get_clue(c) for c in clues))
 # clue_words.update(*string.ascii_lowercase)
-print(len(clue_words))
 empty_padded = read_from_file('empty_padded_clue_words.pickle', lambda:None) 
 # every word less than crossword_size is padded with empty squares
 # so [cat, parks, star] when crossword_size is 5 becomes [cat00, 0cat0, 00cat, parks0, 0parks, star0, 0star]
@@ -205,12 +214,12 @@ def get_start_cache(inp, post=None):
 starts_with_cache = dict()
 
 def generate_crossword(base: Crossword, level=0):
-    print(f'{level}',end='')
+    # print(f'{level}',end='')
     if level == base.size: # exit condition
         return base
     if base.at_level(level) == base.empty_level():
-        rand = 5000 if level == 0 else 15000 # number of words to randomly select from clue_words to test
-        grab = 2000 if level == 0 else 200 # number of highest-scoring words to grab from the random selection
+        rand = 1 if level == 0 else 5000 # number of words to randomly select from clue_words to test
+        grab = 1 if level == 0 else 400 # number of highest-scoring words to grab from the random selection
         grab = -grab
         
         # if level == 0:
@@ -252,6 +261,8 @@ def generate_crossword(base: Crossword, level=0):
         if next_words[grab][1] > 0: # if the lowest-scoring word out of the top <grab> words has a positive score
             base.place_word(level * base.size, random.choice(next_words[grab:])[0]) # randomly select a word from the top <grab> words
         else:
+            if next_words[-1][1] == 0:
+                return Crossword(None)
             base.place_word(level * base.size, next_words[-1][0]) # otherwise, select the highest-scoring word
         return generate_crossword(base, level + 1)
         # print(len([1 for x in hm if type(x[1]) == int]), len([1 for x in hm if type(x[1]) == float]), len([1 for x in hm if x[1] == 0]))
@@ -273,11 +284,17 @@ def generate_crossword(base: Crossword, level=0):
 
 x = Crossword('aaaaaaaaa')
 # print([word in clue_words for word in x.get_all_words()])
-i = 12038
+i = len(list(open('crossword.txt', 'r')))
+attempts = 0
 while True:
+    attempts += 1
     x = generate_crossword(Crossword.empty_crossword(crossword_size))
     if x.is_valid(clue_words):
+        print(f'\n{{attempts = {attempts}}}')
         with open('crossword.txt', 'a') as f:
             i += 1
-            print(f'\nCrossword #{i:,}: \t{x.data}')
-            f.write(x.data + '\n')
+            print(f'Crossword #{i:,}:')
+            [print(f'\t\t{x.data[i*5:(i+1)*5]}') for i in range(5)]
+        attempts = 0
+            
+ # best params start at 20,594
