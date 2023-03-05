@@ -1,14 +1,27 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { RoomInfo, RoomMsg } from '../communications/rooms'
 import { io } from 'socket.io-client'
+import User from '../user/types'
 import './App.css'
 
+const socket = io('http://localhost:3000', {
+    query: {
+        arg: new URLSearchParams(window.location.search).toString()
+    }
+});
+
+let user = new User(
+    localStorage.getItem('username') ?? '',
+    localStorage.getItem('publicId') ?? '',
+    localStorage.getItem('privateId') ?? '',
+    socket
+);
+
+socket.on('Reply', (msg: any) => {
+    console.log(msg);
+});
+
 function App() {
-
-    const socket = io('http://localhost:3000');
-
-    // socket.on('connect', () => {
-    //     console.log(``
-    //   });
 
     const [coralText, lightGreenText, whiteText] = [
         "color: coral; font-weight: bold;",

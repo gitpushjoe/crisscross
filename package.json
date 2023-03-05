@@ -2,7 +2,6 @@
   "name": "crisscross",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
   "scripts": {
     "dev": "tsc --alwaysStrict --noEmitOnError --pretty && vite",
     "build": "tsc -w && vite build",
