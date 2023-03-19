@@ -105,8 +105,7 @@ function App(this: any) {
     function handleSubmit(e: any): React.FormEventHandler<HTMLFormElement> | undefined  {
         e.preventDefault();
         setMessage('');
-        user!.socket.emit('message', messageRef!.current!.value);
-        const response : string = handleInput(messageRef!.current!.value);
+        const response : string = handleInput(messageRef!.current!.value, user!);
         useMessageLog([
             makeConsoleText('client > ', 'orange', true),
             makeConsoleText(messageRef!.current!.value, 'lightgray')],

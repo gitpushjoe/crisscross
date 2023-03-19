@@ -9,9 +9,23 @@ enum MessageType {
     failure = 'failure',
 }
 
+type successfulReturn = {
+    type: string,
+    topic: string,
+    [arg: string]: string|object,
+}
+
+type errorReturn = {
+    error: {
+        errorType: string,
+        [arg: string]: string|number|object,
+    }
+}
+
+type returnObject = successfulReturn | errorReturn;
+
 class ProtocolClass {
     public readonly syntaxes: Map<string, string[]>; // type topic arg1 arg2 arg3
-
     constructor(
         syntaxes: string[],
         public readonly validTypes: string[],
@@ -34,7 +48,7 @@ class ProtocolClass {
         }
     }
 
-    public parse(command: string, json: object = {}) : object {
+    public parse(command: string, json: object = {}) : returnObject {
         const commandSplit = command.split(' ');
         if (commandSplit.length < 2) {
             return {error: {errorType: 'incomplete', commandLength: commandSplit.length}};
@@ -47,14 +61,11 @@ class ProtocolClass {
         if (template.length != args.length + 2) {
             return {error: {errorType: 'syntax', template: template.join(' ')}};
         }
-        let argMap : {[key: string]: string} = {};
-        argMap.type = type;
-        argMap.topic = topic;
+        let argMap : returnObject = {type, topic};
         for (let a in template) {
             const [myArg, templateArg] = [commandSplit[a] !== '{}' ? commandSplit[a] : JSON.stringify(json), template[a]];
             if (templateArg.startsWith('$')) {
                 const argName = templateArg.slice(1);
-                console.log(argName)
                 if (this.argValidations[argName] && !this.argValidations[argName](myArg)) {
                     return {error: {errorType: 'argument', argName, argValue: myArg, argValidation: this.argValidations[argName].toString()}};
                 }
@@ -81,6 +92,18 @@ class ProtocolClass {
                 if (this.argValidations[argName] && !this.argValidations[argName](myArg)) {
                     return false;
                 }
+            }
+        }
+        return true;
+    }
+
+    public validateArgs(message: successfulReturn) : boolean {
+        if (message.error) {
+            return false;
+        }
+        for (const key in message) {
+            if (this.argValidations[key] && !this.argValidations[key](message[key] as string)) {
+                return false;
             }
         }
         return true;
@@ -123,7 +146,7 @@ const Protocol = new ProtocolClass(
         'ready',
         'crossword',
     ], {
-        username: (value: string) => value.length > 0,
+        username: (value: string) => value.length > 0 && /^[a-zA-Z0-9]+$/.test(value),
         privacy: (value: string) => value == 'public' || value == 'private',
         cwSize: (value: string) => value == 'mini' || value == 'medium' || value == 'max',
         capacity: (value: string) => parseInt(value) > 0 && parseInt(value) <= 16,
@@ -133,4 +156,5 @@ const Protocol = new ProtocolClass(
     }
 );
 
-export { MessageType, Protocol };
+export { MessageType, Protocol, };
+export type { successfulReturn, errorReturn, returnObject };

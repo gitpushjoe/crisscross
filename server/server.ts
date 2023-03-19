@@ -9,6 +9,7 @@ import cookie from 'cookie';
 import { serialize, parse } from 'cookie';
 import fs from 'fs';
 import Cookies from 'js-cookie';
+import { Protocol, successfulReturn } from '../communications/types';
 
 const io = new SocketIOServer(server, {
     cors: {
@@ -54,8 +55,8 @@ io.on('connection', (socket: any) => {
     }
     console.log(`Client connected: ${socket.id} with authId: ${cookie.authId}`);
     
-    socket.on('message', (message: string) => {
-        console.log(`Message from ${socket.id}: ${message}`);
+    socket.on('message', (message: successfulReturn) => {
+        console.log(`Message from ${socket.id}: ${JSON.stringify(message, null, 4)}`);
     });
 
     socket.on('disconnect', () => {

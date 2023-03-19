@@ -1,5 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import { MessageType } from "../communications/types";
+import { successfulReturn, errorReturn } from "../communications/types";
 
 class User {
     constructor(
@@ -14,8 +15,10 @@ class User {
         this.socket = socket;
     }
 
-    send(message: string) {
-        this.socket.emit('message', message);
+    emit(message: successfulReturn | errorReturn) {
+        if (!message.error) {
+            this.socket.emit('message', message)
+        }
     }
 }
 
