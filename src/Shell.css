@@ -1,0 +1,65 @@
+.guide {
+    font-family: 'Courier New';
+    font-weight: 500;
+    font-size: .75em;
+    transform: scale(90%, 100%) translate(-7, 0%);
+    -webkit-transform: scale(90%, 100%) translate(-7, 0%);
+    -moz-transform: scale(90%, 100%) translate(-7, 0%);
+    -ms-transform: scale(90%, 100%) translate(-7, 0%);
+    -o-transform: scale(90%, 100%) translate(-7, 0%);
+}
+
+body {
+    background-color: #222222;
+    overflow-x: hidden;
+    overflow-y: scroll;
+}
+
+p {
+    font-family: 'Source Code Pro';
+    font-size: 2em;
+    color: white;
+    width: 100%;
+    height: fit-content;
+    overflow-wrap: break-word;
+    display: inline-block;
+    margin: 0.2em;
+    white-space: pre;
+}
+
+form {
+    height: 0;
+}
+
+#input {
+    position: relative;
+    width: 100%;
+    height: 4em;
+    overflow-x: clip;
+    overflow-y: clip;
+    opacity: 0;
+    cursor: pointer;
+    margin: 0;
+}
+
+.shell {
+    position: absolute;
+    width: calc(100vw - 60px);
+    min-height: auto;
+    top: 0;
+    overflow-x: clip;
+    overflow-y: clip;
+    cursor: default;
+    margin-left: 30px;
+    margin-top: 30px;
+}
+
+.messageLog {
+    height: fit-content;
+}
+
+span {
+    padding: 0;
+    margin: 0;
+    border: 0;
+}

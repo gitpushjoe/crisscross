@@ -25,3 +25,4 @@ dist-ssr
 
 pre/venv
 pre/clues.tsv
+server/socket.txt
