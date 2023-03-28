@@ -9,20 +9,20 @@ enum MessageType {
     failure = 'failure',
 }
 
-type successfulReturn = {
+type message = {
     type: string,
     topic: string,
     [arg: string]: string|object,
 }
 
-type errorReturn = {
+type protocolError = {
     error: {
         errorType: string,
         [arg: string]: string|number|object,
     }
 }
 
-type returnObject = successfulReturn | errorReturn;
+type returnObject = message | protocolError;
 
 class ProtocolClass {
     public readonly syntaxes: Map<string, string[]>; // type topic arg1 arg2 arg3
@@ -97,7 +97,7 @@ class ProtocolClass {
         return true;
     }
 
-    public validateArgs(message: successfulReturn) : boolean {
+    public validateArgs(message: message) : boolean {
         if (message.error) {
             return false;
         }
@@ -112,9 +112,10 @@ class ProtocolClass {
 
 const Protocol = new ProtocolClass(
     [
-        'request host $username $privacy $cwSize $capacity',
+        'request host $username $privacy $cwSize $capacity', // to-do: warn logic
         'success host $roomInfo_success_host',
         'error host $errorMsg',
+        'warn host $warnMsg',
 
         'request join $roomCode $username',
         'success join $roomInfo_success_join',
@@ -138,6 +139,7 @@ const Protocol = new ProtocolClass(
         'success',
         'error',
         'failure',
+        'warn',
         'broadcast'
     ], [
         'host',
@@ -150,11 +152,13 @@ const Protocol = new ProtocolClass(
         privacy: (value: string) => value == 'public' || value == 'private',
         cwSize: (value: string) => value == 'mini' || value == 'medium' || value == 'max',
         capacity: (value: string) => parseInt(value) > 0 && parseInt(value) <= 16,
-        roomCode: (value: string) => (value.length == 6) && Boolean(parseInt(value)),
+        roomCode: (value: string) => (value.length == 8) && Boolean(parseInt(value)),
         readyStatus: (value: string) => value == 'true' || value == 'false',
-        errorMsg: (value: string) => value.length > 0
+        errorMsg: (value: string) => value.length > 0,
+        warnMsg: (value: string) => value.length > 0,
+        ignoreWarnings: (value: string) => value == 'true' || value == 'false'
     }
 );
 
 export { MessageType, Protocol, };
-export type { successfulReturn, errorReturn, returnObject };
+export type { message, protocolError };

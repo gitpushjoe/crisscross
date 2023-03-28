@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { RoomInfo } from '../communications/rooms'
+import { Room } from '../rooms/rooms'
 import { io } from 'socket.io-client'
-import { Protocol } from '../communications/types'
+import { Protocol, message} from '../messaging/protocol'
 import User from '../user/types'
-import handleInput from '../protocol/client'
+import handleInput from '../messaging/client'
 import './Shell.css'
 
 function App(this: any) {
@@ -50,11 +50,11 @@ function App(this: any) {
 
         if (socket) {
             console.log(socket)
-            socket.on('reply', (msg: string) => {
+            socket.on('response', (msg: message) => {
                 console.log(msg);
                 useMessageLog([
-                    makeConsoleText('server > ', '#8BC34A', true),
-                    makeConsoleText(msg, 'green')
+                    makeConsoleText(`server >  ${msg.type} ${msg.topic} `, '#8BC34A', true),
+                    makeConsoleText(JSON.stringify(msg, null, 4), 'green')
                 ]);
                 handleServerMessage('reply ' + msg);
             });

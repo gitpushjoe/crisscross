@@ -5,11 +5,9 @@ const app = express();
 import * as http from 'http';
 const server = new http.Server(app);
 import crypto from 'crypto';
-import cookie from 'cookie';
 import { serialize, parse } from 'cookie';
-import fs from 'fs';
-import Cookies from 'js-cookie';
-import { Protocol, successfulReturn } from '../communications/types';
+import { RoomManager } from '../rooms/rooms';
+import { Protocol, message } from '../messaging/protocol';
 
 const io = new SocketIOServer(server, {
     cors: {
@@ -19,15 +17,15 @@ const io = new SocketIOServer(server, {
     }
   });
 
-  io.engine.on("initial_headers", (headers, request) => {
+io.engine.on("initial_headers", (headers, request) => {
     if (!request!.headers!.cookie || request!.headers!.cookie === 'null') {
             headers["set-cookie"] = serialize("authId", crypto.randomUUID(), { maxAge: 86400, httpOnly: true, path: '/', sameSite: 'strict'});
             console.log(`\tDispatching cookie: ${headers["set-cookie"]}`);
     }
     // console.log(request.headers);
     return '';
-    
-  });
+
+});
 
 io.engine.on("headers", (headers, request) => {
     if (!request!.headers!.cookie || request!.headers!.cookie === 'null') {
@@ -37,9 +35,10 @@ io.engine.on("headers", (headers, request) => {
     // console.log(request.headers);
     return '';
     
-  });
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
+const RoomMan = new RoomManager(256);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
@@ -55,8 +54,31 @@ io.on('connection', (socket: any) => {
     }
     console.log(`Client connected: ${socket.id} with authId: ${cookie.authId}`);
     
-    socket.on('message', (message: successfulReturn) => {
+    socket.on('message', (message: message) => {
         console.log(`Message from ${socket.id}: ${JSON.stringify(message, null, 4)}`);
+        switch (message.type) {
+            case 'request': {
+                switch (message.topic) {
+                    case 'host': {
+                        const res = RoomMan.createRoom(message.username as string, 
+                            cookie.authId, 
+                            message.privacy as string, 
+                            message.cwSize as string, 
+                            parseInt(message.capacity as string));
+                        console.log(`Responding: ${JSON.stringify(res, null, 4)}`)
+                        socket.emit('response', res);
+                        break;
+                    }
+                    case 'join': {
+                        const res = RoomMan.joinRoom(message.username as string,
+                            cookie.authId,
+                            message.roomCode as string);
+                        console.log(`Responding: ${JSON.stringify(res, null, 4)}`);
+                        socket.emit('response', res);
+                    }
+                }
+            }
+        }
     });
 
     socket.on('disconnect', () => {

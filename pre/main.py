@@ -8,10 +8,9 @@ import os
 import re
 import string
 import re
-import numpy as np
 import random
 import itertools
-import threading
+import json
 
 @dataclass
 class Clue:
@@ -29,6 +28,7 @@ class Crossword:
     size: int
     functional: bool
     empty: ClassVar[str] = '0' # character used to represent empty squares
+    blank: ClassVar[str] = '?' # character used to represent blank squares
 
     def __init__(self, data):
         self.functional = True
@@ -74,7 +74,7 @@ class Crossword:
         return self.empty * self.size
     
     def at(self, n):
-        return self.data[n]
+        return self.data[n] if n < len(self.data) else None
     
     def at_pos(self, x, y):
         return self.at(x + y * self.size)
@@ -88,56 +88,39 @@ class Crossword:
     def get_row(self, row):
         return self.data[row * self.size: (row + 1) * self.size]
     
+    def set(self, n, char):
+        self.data = self.data[:n] + char + self.data[n + 1:]
+    
+    def print(self):
+        for i in range(self.size):
+            print(self.at_level(i))
+
     # returns a list of words in a column, or a list of lists of words in each column if col is -1
     # col - column to get words from, -1 for all columns
-    # level - level to check for empty squares, -1 for no check, must also set on_empty
-    # on_empty - value to return if level is set and the square at x=col, y=level is empty
-    def get_col_words(self, col=-1, level=-1, on_empty=None):
-        level_check = False
-        if 0 <= level < self.size:
-            if on_empty is None:
-                raise ValueError("on_empty must be set if level is set")
-            else:
-                level_check = True
+    # row - row to start from, 0 for top
+    def get_col_words(self, col=-1, row=0):
+        # print(self.get_col(col)[row:].split(self.empty))
         if 0 <= col < self.size:
-            return re.findall(rf'([a-zA-Z]+)', self.get_col(col)) if not level_check or self.at_pos(col, level) != self.empty else [on_empty]
+            return [w for w in self.get_col(col)[row:].split(self.empty) if w]
         else:
-            if level_check:
-                return [re.findall(rf'([a-zA-Z]+)', self.get_col(col)) if self.at_pos(col, level) != self.empty else [on_empty] for col in range(self.size)]
-            else:
-                return [re.findall(rf'([a-zA-Z]+)', self.get_col(col)) for col in range(self.size)]
+            return [[w for w in self.get_col(c)[row:].split(self.empty) if w] for c in range(self.size)]
     
     # returns a list of words in a row, or a list of lists of words in each row if row is -1
     # row - row to get words from, -1 for all rows
-    # level - level to check for empty squares, -1 for no check, must also set on_empty
-    # on_empty - value to return if level is set and the square at x=row, y=level is empty
-    def get_row_words(self, row=-1, level=-1, on_empty=None):
-        level_check = False
-        if 0 <= level < self.size:
-            if on_empty is None:
-                raise ValueError("on_empty must be set if level is set")
-            else:
-                level_check = True
+    # col - column to start from, 0 for left
+    def get_row_words(self, row=-1, col=0):
         if 0 <= row < self.size:
-            return re.findall(rf'([a-zA-Z]+)', self.get_row(row)) if not level_check or self.at_pos(row, level) != self.empty else [on_empty]
+            return [w for w in self.get_row(row)[col:].split(self.empty) if w]
         else:
-            if level_check:
-                return [re.findall(rf'([a-zA-Z]+)', self.get_row(row)) if self.at_pos(row, level) != self.empty else [on_empty] for row in range(self.size)]
-            else:
-                return [re.findall(rf'([a-zA-Z]+)', self.get_row(row)) for row in range(self.size)]
+            return [[w for w in self.get_row(r)[col:].split(self.empty) if w] for r in range(self.size)]
 
-    # same as get_col_words but returns the last word in each column
-    # col, level, on_empty - passed down to get_col_words
-    def get_bottom_col_words(self, col=-1, level=-1, on_empty=None): 
-        if 0 <= level < self.size and on_empty is None:
-            raise ValueError("on_empty must be set if level is set")
-        if 0 <= col < self.size:
-            if self.get_col_words(col, level, on_empty) == []:
-                return ""
-            else:
-                return self.get_col_words(col, level, on_empty)[-1]
-        else:
-            return [x[-1] if x else "" for x in self.get_col_words(-1, level, on_empty)]
+    def get_curr_col_word(self, col, row=0):
+        # print([word for word in self.get_col_words(col, row) if self.blank in word])
+        curr = [word for word in self.get_col_words(col, row) if self.blank in word]
+        return curr[0] if curr else None
+    
+    def get_curr_row_word(self, row, col=0):
+        return [word for word in self.get_row_words(row, col) if self.blank in word][0]
 
     def merge(self, other):
         if self.size != other.size:
@@ -174,7 +157,7 @@ def read_from_file(file_name, load_function=None):
 def get_clue(lst):
     return str(lst[2]).lower()
 
-crossword_size = 5
+crossword_size = 7
 
 if not os.path.exists('clue_words.pickle'):
     clues = pd.read_table('clues.tsv', error_bad_lines=False).values.tolist()
@@ -200,101 +183,104 @@ if empty_padded is None:
             empty_padded.append(word)
     save_to_file(empty_padded, 'empty_padded_clue_words.pickle')
 
-# pulls value from start_cache dictionary
-# inp - string to check
-# post - optional function to run on [inp, result]
-# returns number of words in clue_words that start with inp, or post([inp, result]) if post is set
-def get_start_cache(inp, post=None):
+def get_start_cache(inp, blank):
+    start = inp[:inp.index(blank)]
     if inp not in starts_with_cache:
-        starts_with_cache[inp] = len([c for c in clue_words if c.startswith(inp)])
-    if post:
-        return post([inp, starts_with_cache[inp]])
+        starts_with_cache[inp] = len([c for c in word_length_map[len(inp)] if c.startswith(start)])
     return starts_with_cache[inp]
 
 starts_with_cache = dict()
+clue_words.update(*string.ascii_lowercase)
+word_length_map = {i: [c for c in clue_words if len(c) == i] for i in range(3, crossword_size + 1)}
+word_length_map.update({1: list(string.ascii_lowercase)})
 
-def generate_crossword(base: Crossword, level=0):
+def generate_crossword(base: Crossword, level=0, dictionary=clue_words):
     # print(f'{level}',end='')
+    # base.print()
+    # print()
     if level == base.size: # exit condition
         return base
-    if base.at_level(level) == base.empty_level():
-        rand = 1 if level == 0 else 5000 # number of words to randomly select from clue_words to test
-        grab = 1 if level == 0 else 400 # number of highest-scoring words to grab from the random selection
+    if '?' not in base.at_level(level): # if the row is already filled, skip it
+        return generate_crossword(base, level + 1)
+    if base.size == 7:
+        rand = 200 if level == 0 else 1600 # number of words to randomly select from clue_words to test
+        grab = 10 if level == 0 else 800 # number of highest-scoring words to grab from the random selection
         grab = -grab
-        
-        # if level == 0:
-        #     base.place_word(0, random.choice(empty_padded), inplace=True)
-        #     return generate_crossword(base, 1)
-        # pattern_template = []
-        # for s in range(base.size):
-        #     accepted_letters = []
-        #     for letter in string.ascii_lowercase:
-        #         base.place_letter(level * base.size + s, letter, inplace=True)
-        #         word = base.get_bottom_col_words(s)
-        #         if get_start_cache(word) > 0:
-        #             accepted_letters.append(letter)
-        #     if len(accepted_letters) == 0:
-        #         accepted_letters = [base.empty]
-        #     base.place_letter(level * base.size + s, base.empty, inplace=True)
-        #     pattern_template.append('|'.join(accepted_letters))
-
-        next_words = []
-        # incentive is the value returned when the word just placed has an empty square in the column
-        # technically, the value should be the size of next_words, since that column was just "reset"
-        # however, that would result in a lot of blank spaces
-        # so, it's set to 1250 so that 4- and 3-letter words can *sometimes* appear in the top column, and 1.0 otherwise to prioritize longer words
-        incentive = 1250.0 if level == 0 else 1.0 
-        for word in random.choices(empty_padded, k=rand):
-            base.place_word(level * base.size, word, inplace=True)
+    elif base.size == 5:
+        rand = 1 if level == 0 else 1600
+        grab = 1 if level == 0 else 800
+        grab = -grab
+    
+    next_words = []
+    template_word = base.at_level(level)
+    template_start = template_word.index('?') if '?' in template_word else 0
+    template_word = template_word[template_start:]
+    if '?' not in template_word:
+        return base
+    template_word = [x for x in template_word.split(base.empty) if x][0] if base.empty in template_word else template_word
+    for word in random.choices(word_length_map[len(template_word)], k=rand):
+        base.place_word(level * base.size + template_start, word, inplace=True)
+        if level != base.size - 1:
             next_words.append((word,\
                                 reduce( \
                                     (lambda x, y: x * y), # iterate through each column, and multiply values together to get overall score
-                                    [get_start_cache( # returns the number of words in clue_words that start with the word at the bottom of the column
-                                        base.get_bottom_col_words(col, level, "!"), # returns the word at the bottom of the column, or '!' if the word we just placed has an empty square in that column
-                                        lambda s: incentive if s[0] == '!' else int(s[1])) 
-                                    for col in range(base.size)
+                                    [1] + [get_start_cache( # returns the number of words in clue_words that start with the words in the column
+                                        base.get_curr_col_word(col), # get the word in the column (e.g. 'tra??')
+                                        base.blank # get the blank character ('?')
+                                    ) 
+                                    for col in range(base.size) \
+                                        if (base.at_pos(col, level + 1) == base.blank \
+                                        and base.at_pos(col, level) != base.empty) \
                                 ]))
                             )
-        # next_words : [(word, score), ...]
+        elif base.is_valid(clue_words):
+            return base
+    if level == base.size - 1:
+        return Crossword(None)
+    next_words = sorted(next_words, key=lambda s: s[1])
+    grab = max(grab, -len(next_words))
+    if next_words[grab][1] > 0: # if the lowest-scoring word out of the top <grab> words has a positive score
+        base.place_word(level * base.size + template_start, random.choice(next_words[grab:])[0]) # randomly select a word from the top <grab> words
+    else:
+        if next_words[-1][1] == 0:
+            return Crossword(None)
+        base.place_word(level * base.size + template_start, next_words[-1][0]) # otherwise, select the highest-scoring word
+    if '?' in base.at_level(level):
+        return generate_crossword(base, level)
+    return generate_crossword(base, level + 1)
 
-        next_words = sorted(next_words, key=lambda s: s[1])
-        if next_words[grab][1] > 0: # if the lowest-scoring word out of the top <grab> words has a positive score
-            base.place_word(level * base.size, random.choice(next_words[grab:])[0]) # randomly select a word from the top <grab> words
-        else:
-            if next_words[-1][1] == 0:
-                return Crossword(None)
-            base.place_word(level * base.size, next_words[-1][0]) # otherwise, select the highest-scoring word
-        return generate_crossword(base, level + 1)
-        # print(len([1 for x in hm if type(x[1]) == int]), len([1 for x in hm if type(x[1]) == float]), len([1 for x in hm if x[1] == 0]))
-        # print([x for x in hm if x[1] == 0])
-        # pattern = ''
-        # for i in range(base.size - 2):
-        #     pattern += '('
-        #     temp_pattern_start = f'(({pattern_template[i]})({pattern_template[i+1]})({pattern_template[i+2]}))'
-        #     temp_pattern = ''
-        #     j = base.size - 1
-        #     while j > i + 2:
-        #         temp_pattern = f'(({pattern_template[j]}){temp_pattern})?'
-        #         j -= 1
-        #     temp_pattern = f'(^{temp_pattern_start}{temp_pattern}$)'
-        #     pattern += temp_pattern + ')|'
-        # pattern = pattern[:-1]
-        # return pattern
+filename = input('Enter src: ')
+with open(filename, 'r') as f:
+    templates = json.load(f)
+if 'success' in filename:
+    thresh = 0.1
+    templates = [c for [c, v] in templates.items() if v[0] >= thresh]
+print(templates, len(templates))
+dest = input('Enter dest: ')
+time.sleep(3)
 
-
-x = Crossword('aaaaaaaaa')
-# print([word in clue_words for word in x.get_all_words()])
-i = len(list(open('crossword.txt', 'r')))
-attempts = 0
-while True:
-    attempts += 1
-    x = generate_crossword(Crossword.empty_crossword(crossword_size))
-    if x.is_valid(clue_words):
-        print(f'\n{{attempts = {attempts}}}')
-        with open('crossword.txt', 'a') as f:
-            i += 1
-            print(f'Crossword #{i:,}:')
-            [print(f'\t\t{x.data[i*5:(i+1)*5]}') for i in range(5)]
-        attempts = 0
-            
- # best params start at 20,594
+if __name__ == '__main__':
+    i = len(list(open(dest, 'r')))
+    attempts = 0
+    start = int(time.time() * 100)
+    # templates = {t: [0, 0] for t in templates}
+    while True:
+        attempts += 1
+        t = random.choice(list(templates))
+        x = generate_crossword(Crossword(t))
+        # templates[t][1] += 1
+        if x.is_valid(clue_words):
+            # templates[t][0] += 1
+            save = start
+            start = int(time.time() * 100)
+            print(f'\n{{attempts = {attempts}}} ({(start - save) / 100:.2}s elapsed, avg: {int((start - save) / attempts)}ms)')
+            with open(dest, 'a') as f:
+                i += 1
+                print(f'Crossword #{i:,}:')
+                [print(f'\t\t{x.data[i*x.size:(i+1)*x.size]}') for i in range(x.size)]
+                f.write(x.data + '\n')
+            attempts = 0
+            # with open('templates\medium_success_rate.json', 'w') as f:
+            #     json.dump({i: [v[0] / max(v[1], 1), v[1]] for i, v in templates.items()}, f)
+                
+    # best params start at 20,594
