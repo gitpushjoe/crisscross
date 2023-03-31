@@ -6,7 +6,7 @@ function handleInput(input: string, user : User): string {
     const message = Protocol.parse(input);
     if (!message.error) user.emit(message);
     const endTime = Date.now();
-    return JSON.stringify(message, null, 4) + Protocol.validateArgs(message as message) + ` ${endTime - startTime}ms`;
+    return JSON.stringify(message, null, 4) + ` ${endTime - startTime}ms`;
 }
 
 export default handleInput;

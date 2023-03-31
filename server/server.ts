@@ -75,6 +75,15 @@ io.on('connection', (socket: any) => {
                             message.roomCode as string);
                         console.log(`Responding: ${JSON.stringify(res, null, 4)}`);
                         socket.emit('response', res);
+                        break;
+                    }
+                }
+                break;
+            }
+            case 'dev': {
+                switch (message.topic) {
+                    case 'get': {
+                        return socket.emit('response', RoomMan.dev_status());
                     }
                 }
             }

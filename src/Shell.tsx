@@ -41,6 +41,10 @@ function App(this: any) {
             }
         });
 
+        socket.on('connect', () => {
+            useMessageLog(createLocalLog(`connected to localhost:3000 as ${socket.id}`));
+        });
+
         setUser(_ => new User(
             localStorage.getItem('username') ?? '',
             localStorage.getItem('publicId') ?? '',
@@ -54,8 +58,16 @@ function App(this: any) {
                 console.log(msg);
                 useMessageLog([
                     makeConsoleText(`server >  ${msg.type} ${msg.topic} `, '#8BC34A', true),
-                    makeConsoleText(JSON.stringify(msg, null, 4), 'green')
                 ]);
+                for (const [key, value] of Object.entries(msg)) {
+                    if (key !== 'type' && key !== 'topic') {
+                        const val = typeof value === 'string' ? value : JSON.stringify(value, null, 4);
+                        useMessageLog([
+                            makeConsoleText(`\t${key}: `, 'lightgreen', true),
+                            makeConsoleText(val, 'lightgreen')
+                        ]);
+                    }
+                }
                 handleServerMessage('reply ' + msg);
             });
         }

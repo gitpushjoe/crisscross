@@ -7,7 +7,7 @@ import { Protocol } from '../messaging/protocol'
 function errorMsg(topic: string, msg: string): message {
     return {
         type: 'error',
-        topic: 'host',
+        topic,
         errorMsg: msg
     }
 }
@@ -15,7 +15,7 @@ function errorMsg(topic: string, msg: string): message {
 function warnMsg(topic: string, msg: string): message {
     return {
         type: 'warn',
-        topic: 'host',
+        topic,
         errorMsg: msg
     }
 }
@@ -33,7 +33,8 @@ interface Crossword {
     clues?: {
         across: string[];
         down: string[];
-    }
+    },
+    solution?: string;
 }
 
 interface Room {
@@ -61,26 +62,30 @@ class RoomManager {
         return this.rooms.size;
     }
 
-    get_player(player: string) {
+    private player_info(player: string) {
         return this.players.get(player);
     }
 
-    at_capacity() {
+    private at_capacity() {
         return this.size >= this._capacity;
     }
 
-    get_public(authId: string): string {
-        if (!this.get_player(authId)) {
+    private get_public(authId: string): string {
+        if (!this.player_info(authId)) {
             this.players.set(authId, {publicId: crypto.randomUUID(), roomId: ''});
         }
         return this.players.get(authId)?.publicId || '';
+    }
+
+    private player_index(authId: string): number {
+        return this.rooms.get(this.player_info(authId)?.roomId || '')?.players.findIndex(player => player.publicId == this.get_public(authId)) || -1;
     }
 
     public createRoom(username: string, authId: string, privacy: string, cwSize: string, capacity: number): message {
         if (this.at_capacity()) {
             return errorMsg('host', 'Server is at capacity.');
         }
-        if (this.get_player(authId)?.roomId) {
+        if (this.player_info(authId)?.roomId) {
             return warnMsg('host', 'This will remove you from your current room. Are you sure?');
         }
         const roomKey = [...Array(16).keys()].reduce((acc, curr) => acc + crypto.randomUUID().slice(0, 6), "");
@@ -106,7 +111,7 @@ class RoomManager {
                 crossword: {crossword: ''}
             }]
         });
-        this.get_player(authId)!.roomId = roomCode;
+        this.player_info(authId)!.roomId = roomCode;
         console.log(this.rooms, this.players);
         return Protocol.parse('success host {}', this.rooms.get(roomCode)) as message;
     }
@@ -115,8 +120,8 @@ class RoomManager {
         if (!this.rooms.has(roomCode)) {
             return errorMsg('join', 'Invalid room code.');
         }
-        if (this.get_player(authId)?.roomId) {
-            if (this.get_player(authId)?.roomId == roomCode) {
+        if (this.player_info(authId)?.roomId) {
+            if (this.player_info(authId)?.roomId == roomCode) {
                 return errorMsg('join', 'You are already in this room.');
             }
             return warnMsg('join', 'This will remove you from your current room. Are you sure?');
@@ -132,9 +137,29 @@ class RoomManager {
             completed: false,
             crossword: {crossword: ''}
         });
-        this.get_player(authId)!.roomId = roomCode;
+        this.player_info(authId)!.roomId = roomCode;
         console.log(this.rooms, this.players);
         return Protocol.parse('success join {}', this.rooms.get(roomCode)) as message;
+    }
+
+    // public closeRoom(authId: string): message {
+    //     if (!this.player_info(authId)?.roomId) {
+    //         return errorMsg('close', 'You are not in a room.');
+    //     }
+    //     if (!this.player_index(authId)) {
+    //         return errorMsg('close', 'You are not the host of this room.');
+    //     }
+
+    // }
+
+    public get getRooms(): Required<Room>[] {
+        return [...this.rooms.values()];
+    }
+    public get getPlayers(): Map<string, {publicId: string, roomId: string}> {
+        return this.players;
+    }
+    public dev_status(): message { // dev only
+        return Protocol.parse('reply dev {}', {rooms: this.getRooms, players: this.getPlayers}) as message;
     }
 }
 
