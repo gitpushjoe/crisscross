@@ -104,6 +104,12 @@ io.on('connection', (socket: any) => {
                         if (res) socket.emit('response', res);
                         break;
                     }
+                    case 'leave': {
+                        const res = RoomMan.leaveRoom(cookie.authId, socket);
+                        console.log(`Responding: ${JSON.stringify(res, null, 4)}`);
+                        if (res) socket.emit('response', res);
+                        break;
+                    }
                 }
                 break;
             }

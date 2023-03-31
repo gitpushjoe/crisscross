@@ -154,7 +154,7 @@ def read_from_file(file_name, load_function=None):
         data = pickle.load(f)
     return data
 
-def get_clue(lst):
+def get_word(lst):
     return str(lst[2]).lower()
 
 crossword_size = 7
@@ -162,39 +162,39 @@ crossword_size = 7
 if not os.path.exists('clue_words.pickle'):
     clues = pd.read_table('clues.tsv', error_bad_lines=False).values.tolist()
     print(len(clues))
-    clues = [c for c in clues if 3 <= len(get_clue(c)) <= crossword_size]
+    clues = [c for c in clues if 3 <= len(get_word(c)) <= crossword_size]
     print(len(clues))
-    clues = [c for c in clues if False not in [l in string.ascii_lowercase for l in get_clue(c)]]
+    clues = [c for c in clues if False not in [l in string.ascii_lowercase for l in get_word(c)]]
     print(len(clues))
-clue_words = read_from_file('clue_words.pickle', lambda: set(get_clue(c) for c in clues))
+words = read_from_file('clue_words.pickle', lambda: set(get_word(c) for c in clues))
 # clue_words.update(*string.ascii_lowercase)
-empty_padded = read_from_file('empty_padded_clue_words.pickle', lambda:None) 
-# every word less than crossword_size is padded with empty squares
-# so [cat, parks, star] when crossword_size is 5 becomes [cat00, 0cat0, 00cat, parks0, 0parks, star0, 0star]
-if empty_padded is None:
-    empty_padded = []
-    for word in clue_words:
-        if len(word) < crossword_size:
-            temp_word = word
-            while len(temp_word) <= crossword_size:
-                empty_padded.append(temp_word + Crossword.empty * (crossword_size - len(temp_word)))
-                temp_word = Crossword.empty + temp_word
-        else:
-            empty_padded.append(word)
-    save_to_file(empty_padded, 'empty_padded_clue_words.pickle')
+# empty_padded = read_from_file('empty_padded_clue_words.pickle', lambda:None) 
+# # every word less than crossword_size is padded with empty squares
+# # so [cat, parks, star] when crossword_size is 5 becomes [cat00, 0cat0, 00cat, parks0, 0parks, star0, 0star]
+# if empty_padded is None:
+#     empty_padded = []
+#     for word in words:
+#         if len(word) < crossword_size:
+#             temp_word = word
+#             while len(temp_word) <= crossword_size:
+#                 empty_padded.append(temp_word + Crossword.empty * (crossword_size - len(temp_word)))
+#                 temp_word = Crossword.empty + temp_word
+#         else:
+#             empty_padded.append(word)
+#     save_to_file(empty_padded, 'empty_padded_clue_words.pickle')
 
-def get_start_cache(inp, blank):
+def starts_with_count(inp, blank):
     start = inp[:inp.index(blank)]
     if inp not in starts_with_cache:
         starts_with_cache[inp] = len([c for c in word_length_map[len(inp)] if c.startswith(start)])
     return starts_with_cache[inp]
 
 starts_with_cache = dict()
-clue_words.update(*string.ascii_lowercase)
-word_length_map = {i: [c for c in clue_words if len(c) == i] for i in range(3, crossword_size + 1)}
+words.update(*string.ascii_lowercase)
+word_length_map = {i: [c for c in words if len(c) == i] for i in range(3, crossword_size + 1)}
 word_length_map.update({1: list(string.ascii_lowercase)})
 
-def generate_crossword(base: Crossword, level=0, dictionary=clue_words):
+def generate_crossword(base: Crossword, level=0, dictionary=words):
     # print(f'{level}',end='')
     # base.print()
     # print()
@@ -224,7 +224,7 @@ def generate_crossword(base: Crossword, level=0, dictionary=clue_words):
             next_words.append((word,\
                                 reduce( \
                                     (lambda x, y: x * y), # iterate through each column, and multiply values together to get overall score
-                                    [1] + [get_start_cache( # returns the number of words in clue_words that start with the words in the column
+                                    [1] + [starts_with_count( # returns the number of words in clue_words that start with the words in the column
                                         base.get_curr_col_word(col), # get the word in the column (e.g. 'tra??')
                                         base.blank # get the blank character ('?')
                                     ) 
@@ -233,7 +233,7 @@ def generate_crossword(base: Crossword, level=0, dictionary=clue_words):
                                         and base.at_pos(col, level) != base.empty) \
                                 ]))
                             )
-        elif base.is_valid(clue_words):
+        elif base.is_valid(words):
             return base
     if level == base.size - 1:
         return Crossword(None)
@@ -269,7 +269,7 @@ if __name__ == '__main__':
         t = random.choice(list(templates))
         x = generate_crossword(Crossword(t))
         # templates[t][1] += 1
-        if x.is_valid(clue_words):
+        if x.is_valid(words):
             # templates[t][0] += 1
             save = start
             start = int(time.time() * 100)

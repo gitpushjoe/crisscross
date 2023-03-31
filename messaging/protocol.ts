@@ -122,8 +122,8 @@ const Protocol = new ProtocolClass(
         'broadcast join $roomInfo_broadcast_join',
         'error join $errorMsg',
 
-        'request leave $roomCode',
-        'success leave',
+        'post leave',
+        'broadcast leave $roomInfo_broadcast_leave',
         'error leave $errorMsg',
 
         'post start $countdownEnable',

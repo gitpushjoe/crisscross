@@ -77,6 +77,12 @@ class PlayerMap {
     }
 }
 
+interface SocketType {
+    id: '`${string}-${string}-${string}-${string}-${string}`';
+    join: (roomCode: string) => void;
+    leave: (roomCode: string) => void;
+}
+
 class RoomManager {
     constructor(
         private _capacity: number,
@@ -124,7 +130,7 @@ class RoomManager {
         }, [] as string[]);
     }
 
-    public createRoom(username: string, authId: string, privacy: string, cwSize: string, capacity: number, socket: any): message {
+    public createRoom(username: string, authId: string, privacy: string, cwSize: string, capacity: number, socket: SocketType): message {
         if (this.atCapacity()) {
             return errorMsg('host', 'Server is at capacity.');
         }
@@ -163,7 +169,7 @@ class RoomManager {
         return Protocol.parse('success host {}', this._rooms.get(roomCode)) as message;
     }
 
-    public joinRoom(username: string, authId: string, roomCode: string, socket: any): message|null {
+    public joinRoom(username: string, authId: string, roomCode: string, socket: SocketType): message|null {
         if (!this._rooms.has(roomCode)) {
             return errorMsg('join', 'Invalid room code.');
         }
@@ -202,10 +208,40 @@ class RoomManager {
         if (!room) {
             return errorMsg('close', 'Room does not exist.');
         }
-        const authIds = this.getAuthIdsFromRoomCode(room!.roomCode);
+        this.deleteRoom(room.roomCode);
+        return null;
+    }
+    
+    private deleteRoom(roomCode: string) {
+        const authIds = this.getAuthIdsFromRoomCode(roomCode);
         authIds.forEach(authId => this._players.setRoomCode(authId, ''));
-        this._close(room!.roomCode);
-        this._rooms.delete(room!.roomCode);
+        this._close(roomCode);
+        this._rooms.delete(roomCode);
+    }
+
+    private removeRoomIfEmpty(roomCode: string) {
+        if (!this._rooms.get(roomCode)?.players.length) {
+            this.deleteRoom(roomCode);
+        }
+    }
+
+    public leaveRoom(authId: string, socket: SocketType): message|null {
+        if (!this.getRoomCodeFromAuth(authId)) {
+            return errorMsg('leave', 'You are not in a room.');
+        }
+        const room = this.getRoomFromAuth(authId);
+        if (!room) {
+            return errorMsg('leave', 'Room does not exist.');
+        }
+        const playerIndex = this.getPlayerIndex(authId);
+        if (playerIndex == -1 || playerIndex == undefined) {
+            return errorMsg('leave', 'You are not in this room.');
+        }
+        room.players.splice(playerIndex, 1);
+        this._players.setRoomCode(authId, '');
+        this._broadcast(room.roomCode, Protocol.parse('broadcast leave {}', room) as message);
+        this.removeRoomIfEmpty(room.roomCode);
+        socket.leave(room.roomCode);
         return null;
     }
 
