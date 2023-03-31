@@ -118,8 +118,8 @@ const Protocol = new ProtocolClass(
         'error host $errorMsg',
         'warn host $warnMsg',
 
-        'request join $roomCode $username',
-        'success join $roomInfo_success_join',
+        'post join $roomCode $username',
+        'broadcast join $roomInfo_broadcast_join',
         'error join $errorMsg',
 
         'request leave $roomCode',

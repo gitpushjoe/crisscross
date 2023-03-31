@@ -38,7 +38,21 @@ io.engine.on("headers", (headers, request) => {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
-const RoomMan = new RoomManager(256);
+const RoomMan = new RoomManager(256, 
+    (roomCode: string, message: message) => io.to(roomCode).emit('response', message),
+    (roomCode: string) => {
+        const socketsInRoom = io.sockets.adapter.rooms.get(roomCode);
+        if (socketsInRoom) {
+            socketsInRoom.forEach((socketId: string) => {
+                const socket = io.sockets.sockets.get(socketId);
+                if (socket) {
+                    socket.emit('response', Protocol.parse('broadcast close'))
+                    socket.leave(roomCode);
+                }
+            });
+        }
+    }
+    );
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
@@ -64,17 +78,30 @@ io.on('connection', (socket: any) => {
                             cookie.authId, 
                             message.privacy as string, 
                             message.cwSize as string, 
-                            parseInt(message.capacity as string));
+                            parseInt(message.capacity as string),
+                            socket);
                         console.log(`Responding: ${JSON.stringify(res, null, 4)}`)
                         socket.emit('response', res);
+                        break;
+                    }
+                }
+                break;
+            }
+            case 'post': {
+                switch (message.topic) {
+                    case 'close': {
+                        const res = RoomMan.closeRoom(cookie.authId);
+                        console.log(`Responding: ${JSON.stringify(res, null, 4)}`);
+                        if (res) socket.emit('response', res);
                         break;
                     }
                     case 'join': {
                         const res = RoomMan.joinRoom(message.username as string,
                             cookie.authId,
-                            message.roomCode as string);
+                            message.roomCode as string,
+                            socket);
                         console.log(`Responding: ${JSON.stringify(res, null, 4)}`);
-                        socket.emit('response', res);
+                        if (res) socket.emit('response', res);
                         break;
                     }
                 }
@@ -83,9 +110,11 @@ io.on('connection', (socket: any) => {
             case 'dev': {
                 switch (message.topic) {
                     case 'get': {
-                        return socket.emit('response', RoomMan.dev_status());
+                        socket.emit('response', RoomMan.dev_status());
+                        break;
                     }
                 }
+                break;
             }
         }
     });

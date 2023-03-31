@@ -25,7 +25,7 @@ function App(this: any) {
     function useMessageLog(...text: ConsoleText[][]) {
         setMessageLog(m => [...m, ...text]);
         if (cursorRef && cursorRef.current)
-            cursorRef.current!.scrollIntoView();
+            setTimeout(() => cursorRef.current!.scrollIntoView(), 2);
     };
 
     function createLocalLog(text: string): ConsoleText[] {
@@ -124,7 +124,6 @@ function App(this: any) {
         createLocalLog(response));
         messageRef!.current!.value = '';
         cursorRef!.current!.scrollIntoView();
-        console.log(messageRef!.current!.value);
         return;
     }
 
