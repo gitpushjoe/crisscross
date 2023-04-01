@@ -126,7 +126,7 @@ const Protocol = new ProtocolClass(
         'broadcast leave $roomInfo_broadcast_leave',
         'error leave $errorMsg',
 
-        'post start $countdownEnable',
+        'post start $beginCountdown',
         'broadcast start $timeToStart $roomInfo_broadcast_start',
         'error start $errorMsg',
 
@@ -154,7 +154,8 @@ const Protocol = new ProtocolClass(
         roomCode: (value: string) => (value.length == 8) && Boolean(parseInt(value)),
         errorMsg: (value: string) => value.length > 0,
         warnMsg: (value: string) => value.length > 0,
-        ignoreWarnings: (value: string) => value == 'true' || value == 'false'
+        ignoreWarnings: (value: string) => value == 'true' || value == 'false',
+        beginCountdown: (value: string) => value == 'true' || value == 'false',
     }
 );
 

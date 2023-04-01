@@ -3,6 +3,7 @@ import { Ensured } from "../utils/types";
 import { message } from "../messaging/protocol";
 import crypto from 'crypto';
 import { Protocol } from '../messaging/protocol'
+import { Scheduler, Task, Order } from '../utils/scheduling/scheduler';
 
 function errorMsg(topic: string, msg: string): message {
     return {
@@ -78,18 +79,19 @@ class PlayerMap {
 }
 
 interface SocketType {
-    id: '`${string}-${string}-${string}-${string}-${string}`';
+    id: `${string}-${string}-${string}-${string}-${string}`;
     join: (roomCode: string) => void;
     leave: (roomCode: string) => void;
 }
 
 class RoomManager {
+    private _players: PlayerMap = new PlayerMap();
+    private _rooms: Map<string, Required<Room>> = new Map();
+    private _scheduler: Scheduler = new Scheduler();
     constructor(
         private _capacity: number,
         private _broadcast: (roomCode: string, message: message) => void = () => {},
         private _close: (roomCode: string) => void = () => {},
-        private _players: PlayerMap = new PlayerMap(),
-        private _rooms: Map<string, Required<Room>> = new Map(),
     ) {
     }
 
@@ -102,26 +104,26 @@ class RoomManager {
         return this._rooms.get(this._players.get(authId)?.roomCode || '');
     }
 
-    private atCapacity() {
+    private _atCapacity() {
         return this.size >= this._capacity;
     }
 
-    private getPublicIdFromAuth(authId: string, defaultValue = crypto.randomUUID()): string {
+    private _getPublicIdFromAuth(authId: string, defaultValue = crypto.randomUUID()): string {
         if (!this._players.get(authId)?.publicId) {
             this._players.set(authId, {publicId: defaultValue, roomCode: ''});
         }
         return this._players.getPublicId(authId);
     }
 
-    private getRoomCodeFromAuth(authId: string): string {
+    private _getRoomCodeFromAuth(authId: string): string {
         return this._players.get(authId)?.roomCode || '';
     }
 
-    private getPlayerIndex(authId: string): number|undefined {
-        return this.getRoomFromAuth(authId)?.players.findIndex(player => player.publicId == this.getPublicIdFromAuth(authId));
+    private _getPlayerIndex(authId: string): number|undefined {
+        return this.getRoomFromAuth(authId)?.players.findIndex(player => player.publicId == this._getPublicIdFromAuth(authId));
     }
 
-    private getAuthIdsFromRoomCode(roomCode: string): string[] {
+    private _getAuthIdsFromRoomCode(roomCode: string): string[] {
         const players = this._rooms.get(roomCode)?.players || [];
         if (!players.length) return [];
         return [...this._players.data.entries()].reduce((acc, curr) => {
@@ -129,12 +131,25 @@ class RoomManager {
             return acc;
         }, [] as string[]);
     }
+    
+    private _deleteRoom(roomCode: string) {
+        const authIds = this._getAuthIdsFromRoomCode(roomCode);
+        authIds.forEach(authId => this._players.setRoomCode(authId, ''));
+        this._close(roomCode);
+        this._rooms.delete(roomCode);
+    }
+
+    private _removeRoomIfEmpty(roomCode: string) {
+        if (!this._rooms.get(roomCode)?.players.length) {
+            this._deleteRoom(roomCode);
+        }
+    }
 
     public createRoom(username: string, authId: string, privacy: string, cwSize: string, capacity: number, socket: SocketType): message {
-        if (this.atCapacity()) {
+        if (this._atCapacity()) {
             return errorMsg('host', 'Server is at capacity.');
         }
-        if (this.getRoomCodeFromAuth(authId)) {
+        if (this._getRoomCodeFromAuth(authId)) {
             return warnMsg('host', 'This will remove you from your current room. Are you sure?');
         }
         const roomKey = [...Array(16).keys()].reduce((acc, curr) => acc + crypto.randomUUID().slice(0, 6), "");
@@ -157,7 +172,7 @@ class RoomManager {
             crossword: null,
             players: [{
                 username,
-                publicId: this.getPublicIdFromAuth(authId, socket.id),
+                publicId: this._getPublicIdFromAuth(authId, socket.id),
                 connected: true,
                 completed: false,
                 crossword: {crossword: ''}
@@ -166,6 +181,7 @@ class RoomManager {
         this._players.setRoomCode(authId, roomCode);
         console.log(this._rooms, this._players);
         socket.join(roomCode);
+        this._scheduler.makeThread(roomCode);
         return Protocol.parse('success host {}', this._rooms.get(roomCode)) as message;
     }
 
@@ -173,8 +189,8 @@ class RoomManager {
         if (!this._rooms.has(roomCode)) {
             return errorMsg('join', 'Invalid room code.');
         }
-        if (this.getRoomCodeFromAuth(authId)) {
-            if (this.getRoomCodeFromAuth(authId) == roomCode) {
+        if (this._getRoomCodeFromAuth(authId)) {
+            if (this._getRoomCodeFromAuth(authId) == roomCode) {
                 return errorMsg('join', 'You are already in this room.');
             }
             return warnMsg('join', 'This will remove you from your current room. Are you sure?');
@@ -185,7 +201,7 @@ class RoomManager {
         }
         room!.players.push({
             username,
-            publicId: this.getPublicIdFromAuth(authId, socket?.id),
+            publicId: this._getPublicIdFromAuth(authId, socket?.id),
             connected: true,
             completed: false,
             crossword: {crossword: ''}
@@ -198,51 +214,86 @@ class RoomManager {
     }
 
     public closeRoom(authId: string): message|null {
-        if (!this.getRoomCodeFromAuth(authId)) {
+        if (!this._getRoomCodeFromAuth(authId)) {
             return errorMsg('close', 'You are not in a room.');
         }
-        if ( this.getPlayerIndex(authId) != 0) {
+        if ( this._getPlayerIndex(authId) != 0) {
             return errorMsg('close', 'You are not the host of this room.');
         }
         const room = this.getRoomFromAuth(authId);
         if (!room) {
             return errorMsg('close', 'Room does not exist.');
         }
-        this.deleteRoom(room.roomCode);
+        this._scheduler.destroyThread(room.roomCode);
+        this._deleteRoom(room.roomCode);
         return null;
-    }
-    
-    private deleteRoom(roomCode: string) {
-        const authIds = this.getAuthIdsFromRoomCode(roomCode);
-        authIds.forEach(authId => this._players.setRoomCode(authId, ''));
-        this._close(roomCode);
-        this._rooms.delete(roomCode);
-    }
-
-    private removeRoomIfEmpty(roomCode: string) {
-        if (!this._rooms.get(roomCode)?.players.length) {
-            this.deleteRoom(roomCode);
-        }
     }
 
     public leaveRoom(authId: string, socket: SocketType): message|null {
-        if (!this.getRoomCodeFromAuth(authId)) {
+        if (!this._getRoomCodeFromAuth(authId)) {
             return errorMsg('leave', 'You are not in a room.');
         }
         const room = this.getRoomFromAuth(authId);
         if (!room) {
             return errorMsg('leave', 'Room does not exist.');
         }
-        const playerIndex = this.getPlayerIndex(authId);
+        const playerIndex = this._getPlayerIndex(authId);
         if (playerIndex == -1 || playerIndex == undefined) {
             return errorMsg('leave', 'You are not in this room.');
         }
         room.players.splice(playerIndex, 1);
         this._players.setRoomCode(authId, '');
         this._broadcast(room.roomCode, Protocol.parse('broadcast leave {}', room) as message);
-        this.removeRoomIfEmpty(room.roomCode);
+        this._removeRoomIfEmpty(room.roomCode);
         socket.leave(room.roomCode);
         return null;
+    }
+
+    public startGame(authId: string, beginCountdown: string): message|null {
+        if (!this._getRoomCodeFromAuth(authId)) {
+            return errorMsg('start', 'You are not in a room.');
+        }
+        const room = this.getRoomFromAuth(authId);
+        if (!room) {
+            return errorMsg('start', 'Room does not exist.');
+        }
+        if (this._getPlayerIndex(authId) != 0) {
+            return errorMsg('start', 'You are not the host of this room.');
+        }
+        if (room.players.length < 2) {
+            return errorMsg('start', 'Not enough players.');
+        }
+        if (room.active) {
+            return errorMsg('start', 'Game has already started.');
+        }
+        if (beginCountdown == 'true') {
+            if (this._scheduler.getThread(room.roomCode)!.agendaLength > 0)
+                return errorMsg('start', 'Game is already starting.')
+            else
+                this._scheduler.getThread(room.roomCode)?.push(new Task(() => this._beginStartCountdown(room.roomCode, 5000)));
+        } else {
+            this._scheduler.getThread(room.roomCode)?.push(new Order(() => this._cancelStartCountdown(room.roomCode)));
+        }
+        return null;
+    }
+
+    private _beginStartCountdown(roomCode: string, countdown: number): Task|void {
+        if (this._rooms.get(roomCode)!.active) {
+            return;
+        }
+        this._broadcast(roomCode, Protocol.parse(`broadcast start ${countdown} {}`, this._rooms.get(roomCode)) as message);
+        if (countdown == 0) {
+            this._rooms.get(roomCode)!.active = true;
+            return;
+        }
+        return new Task(() => this._beginStartCountdown(roomCode, countdown - 1000), 1000);
+    }
+
+    private _cancelStartCountdown(roomCode: string): void {
+        if (this._rooms.get(roomCode)) {
+            this._rooms.get(roomCode)!.active = false;
+        }
+        this._broadcast(roomCode, Protocol.parse('broadcast start -1 {}', this._rooms.get(roomCode)) as message);
     }
 
     public get getRooms(): Required<Room>[] { // dev only
@@ -251,8 +302,11 @@ class RoomManager {
     public get getPlayers() { // dev only
         return [...this._players.data.entries()];
     }
+    public get getScheduler() { // dev only
+        return [...this._scheduler.threads];
+    }
     public dev_status(): message { // dev only
-        return Protocol.parse('reply dev {}', {rooms: this.getRooms, players: this.getPlayers}) as message;
+        return Protocol.parse('reply dev {}', {rooms: this.getRooms, players: this.getPlayers, threads: this.getScheduler}) as message;
     }
 }
 

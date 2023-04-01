@@ -35,7 +35,7 @@ function App(this: any) {
     }
 
     useEffect(() => {if (!socket) {
-        // const scheduler = new Scheduler();
+        const scheduler = new Scheduler();
         socket = io('http://localhost:3000', {
             withCredentials: true,
             query: {
@@ -45,6 +45,10 @@ function App(this: any) {
 
         socket.on('connect', () => {
             useMessageLog(createLocalLog(`connected to localhost:3000 as ${socket.id}`));
+        });
+
+        socket.on('disconnect', () => {
+            useMessageLog(createLocalLog(`disconnected from localhost:3000`));
         });
 
         setUser(_ => new User(

@@ -110,6 +110,12 @@ io.on('connection', (socket: any) => {
                         if (res) socket.emit('response', res);
                         break;
                     }
+                    case 'start': {
+                        const res = RoomMan.startGame(cookie.authId, message.beginCountdown as string);
+                        console.log(`Responding: ${JSON.stringify(res, null, 4)}`);
+                        if (res) socket.emit('response', res);
+                        break;
+                    }
                 }
                 break;
             }

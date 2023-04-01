@@ -1,8 +1,8 @@
 class Scheduler {
     private _agenda: NodeJS.Timeout[];
     constructor(
-        private _cycle: number = 0, // an interal state value to determine which tasks are too "old" to be visited
-        private _threads: Map<string, Scheduler> = new Map(), // a map of Scheduler instances, each with their own cycle
+        public cycle: number = 0, // an interal state value to determine which tasks are too "old" to be visited
+        public threads: Map<string, Scheduler> = new Map(), // a map of Scheduler instances, each with their own cycle
         private _lockRevisitDelay: number = 200, // the delay after which a task will be revisited if the schedule is locked
         private _locked: boolean = false,
     ) {
@@ -15,40 +15,44 @@ class Scheduler {
             this._agenda = this._agenda.filter((t) => t != timeout);
         }, delayMs + 100, this._agenda.at(-1));
     }
+    
+    private clearAgenda() {
+        this._agenda.forEach((t) => clearTimeout(t));
+        this._agenda = [];
+    }
 
-    public push(task: Task, delayMs: number) { // schedule task to be visited after delayMs
+    public get agendaLength() {
+        return this._agenda.length;
+    }
+
+    public push(task: Task, delayMs: number = 0) { // schedule task to be visited after delayMs
         if (task.cycle < 0) 
-            task.cycle = this._cycle;
+            task.cycle = this.cycle;
         this._schedule(() => {
             this.visit(task);
         }, delayMs, task);
     }
 
-    public clearAgenda() {
-        this._agenda.forEach((t) => clearTimeout(t));
-        this._agenda = [];
-
-    }
-
-    private visit(task: Task, revisit = false) { // visit task
+    private visit(task: Task, revisit = false, ignoreLock = false) { // visit task
         // console.log(this.getAgenda());
-        if (this._locked) { // if schedule is locked, reschedule task to be visited after lockRevisitDelay
+        if (task.isAnOrder() && !revisit) { // Orders increment the cycle, invalidating all tasks from the current cycle (including other Orders)
+            this.cycle++;
+            task.cycle = this.cycle;
+        }
+        if (this._locked && !ignoreLock) { // if schedule is locked, reschedule task to be visited after lockRevisitDelay
             this._schedule((t) => {
                 this.visit(t);
             }, this._lockRevisitDelay, task);
             return;
-        }
-        if (!revisit) { 
-            if (task.isAnOrder()) { // Orders increment the cycle, invalidating all tasks from the current cycle (including other Orders)
-                this._cycle++;
-                task.cycle = this._cycle;
-            }
+        } 
+        if (!revisit) {
             if (task.lock && task.lockBeforeDelay) { 
                 this._locked = true;
+                ignoreLock = true;
             }
             if (task.delayMs > 0) {
                 this._schedule((t) => {
-                    this.visit(t, true);
+                    this.visit(t, true, ignoreLock);
                 }, task.delayMs, task);
                 return;
             }
@@ -56,7 +60,8 @@ class Scheduler {
         if (task.lock && !task.lockBeforeDelay) {
             this._locked = true;
         }
-        if (this._cycle != task.cycle) {
+        if (this.cycle != task.cycle) {
+            this._locked = false;
             return;
         }
         // if task returns another task, visit it (chain of tasks)
@@ -66,34 +71,42 @@ class Scheduler {
         task.execute().then((nextTask) => { 
             this._locked = false;
             if (!nextTask) return;
+            nextTask.cycle = task.cycle;
             this.visit(nextTask);
         });
     }
 
     public makeThread(name: string): Boolean {
-        if (this._threads.has(name)) return false;
-        this._threads.set(name, new Scheduler(this._cycle, new Map() as Map<string, Scheduler>, this._lockRevisitDelay, false));
+        if (this.threads.has(name)) return false;
+        this.threads.set(name, new Scheduler(this.cycle, new Map() as Map<string, Scheduler>, this._lockRevisitDelay, false));
         return true;
     }
 
     public destroyThread(name: string): Boolean {
-        if (!this._threads.has(name)) return false;
-        this._threads.get(name)?.clearAgenda();
-        this._threads.delete(name);
+        if (!this.threads.has(name)) return false;
+        this.threads.get(name)?.clearAgenda();
+        this.threads.delete(name);
         return true;
+    }
+
+    public getThread(name: string): Scheduler|undefined {
+        if (!this.threads.has(name)) return undefined;
+        return this.threads.get(name);
     }
 }
 
 class Task {
     private _isAnOrder: boolean;
+    public args: any[];
     constructor(
-        public callback: (...args: any) => void,
-        public args: any[] = [],
-        public cycle = -1, // if -1, the task will be updated with the current cycle before delayMs
+        public callback: (...args: any) => any = () => {}, // the callback to be executed
         public delayMs = 0, // if > 0, the task will be delayed by delayMs before being executed
+        public cycle = -1, // if -1, the task will be updated with the current cycle before delayMs
         public lock = false, // if true, the schedule will be locked while the task is being completed
         public lockBeforeDelay = false, // if true, the schedule will be locked before the delayMs
+        ...args: any[]
     ) {
+        this.args = args;
         this._isAnOrder = false;
     }
 
@@ -125,7 +138,7 @@ class Order extends Task {
         public lock = false,
         public lockBeforeDelay = false,
     ) {
-        super(callback, args, cycle, delayMs, lock, lockBeforeDelay);
+        super(callback, delayMs, cycle, lock, lockBeforeDelay, ...args);
         this.makeOrder();
     }
 }
