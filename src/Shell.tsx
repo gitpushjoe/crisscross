@@ -5,6 +5,7 @@ import { Protocol, message} from '../messaging/protocol'
 import User from '../user/types'
 import handleInput from '../messaging/client'
 import './Shell.css'
+import { Scheduler, Task } from '../utils/scheduling/scheduler'
 
 function App(this: any) {
 
@@ -34,6 +35,7 @@ function App(this: any) {
     }
 
     useEffect(() => {if (!socket) {
+        // const scheduler = new Scheduler();
         socket = io('http://localhost:3000', {
             withCredentials: true,
             query: {
@@ -73,6 +75,7 @@ function App(this: any) {
         }
         
         function handleServerMessage(msg: string) {
+            // scheduler.push(new Task(x => console.log(x), ['test'], -1, 1000), 1000);
             const msgWords = msg.split(' ');
             if (msg.startsWith('reply id ')) {
                 const [idType, idData] = [msgWords[2], msgWords[3]]
