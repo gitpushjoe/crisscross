@@ -13,7 +13,7 @@ class Scheduler {
         this._agenda.push(setTimeout(callback, delayMs, ...args)); // add setTimeout to agenda
         setTimeout((timeout) => { // remove setTimeout from agenda after executed
             this._agenda = this._agenda.filter((t) => t != timeout);
-        }, delayMs + 100, this._agenda.at(-1));
+        }, delayMs + 10, this._agenda.at(-1));
     }
     
     private clearAgenda() {

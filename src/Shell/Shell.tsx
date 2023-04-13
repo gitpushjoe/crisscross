@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Room } from '../rooms/rooms'
+import { Room } from '../../rooms/rooms'
 import { io } from 'socket.io-client'
-import { Protocol, message} from '../messaging/protocol'
-import User from '../user/types'
-import handleInput from '../messaging/client'
+import { Protocol, message} from '../../messaging/protocol'
+import User from '../../user/types'
+import handleInput from '../../messaging/client'
 import './Shell.css'
-import { Scheduler, Task } from '../utils/scheduling/scheduler'
+import { Scheduler, Task } from '../../utils/scheduling/scheduler'
 
 function App(this: any) {
 

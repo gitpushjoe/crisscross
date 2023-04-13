@@ -1,13 +1,12 @@
 import { io, Socket } from "socket.io-client";
-import { MessageType } from "../messaging/protocol";
-import { message, protocolError } from "../messaging/protocol";
+import { Protocol, message, protocolError } from "../messaging/protocol";
 
 class User {
     constructor(
-        public username: string,
-        public publicId: string,
-        public authId: string,
-        public readonly socket: Socket
+        public username: string = '',
+        public publicId: string = '',
+        public authId: string = '',
+        public socket: Socket|null = null
     ) {
         this.username = username;
         this.publicId = publicId;
@@ -15,10 +14,15 @@ class User {
         this.socket = socket;
     }
 
-    emit(message: message | protocolError): void {
-        if (!message.error) {
-            this.socket.emit('message', message)
+    emit(message: string | message | protocolError): Boolean {
+        if (typeof message == 'string') {
+            message = Protocol.parse(message);
         }
+        if (!message.error) {
+            this.socket!.emit('message', message);
+            return true;
+        }
+        return false;
     }
 }
 

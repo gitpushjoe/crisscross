@@ -1,0 +1,16 @@
+<size>		<cutoff>	<total>		<final>
+
+medium		2000		36900		36086
+medium		0		168776		163639
+mini		2000		453684		442947
+mini		0		587155		559826
+
+	
+				1,246,515	1,202,498		
+
+
+ewers	
+0000t
+barit
+oboli
+doric

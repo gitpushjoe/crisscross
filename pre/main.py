@@ -11,6 +11,7 @@ import re
 import random
 import itertools
 import json
+from color_text import ColorText
 
 @dataclass
 class Clue:
@@ -132,11 +133,59 @@ class Crossword:
     
     def is_valid(self, dictionary):
         return False if not self.functional else all(word in dictionary for word in self.get_all_words())
+    
+    def get_words_with_directions(self):
+        # Initialize variables
+        across = []
+        down = []
+        word_dict = {"across": across, "down": down}
 
-@dataclass
-class CrosswordReference(Crossword):
-    data: str
-    size: int
+        # Find across words
+        for i in range(self.size):
+            row = self.data[i*self.size:(i+1)*self.size]
+            j = 0
+            while j < self.size:
+                if row[j] != "0":
+                    start = j
+                    while j < self.size and row[j] != "0":
+                        j += 1
+                    if j - start >= 3:
+                        across.append({"square": i*self.size+start, "word": row[start:j]})
+                else:
+                    j += 1
+
+        # Find down words
+        for j in range(self.size):
+            col = self.data[j::self.size]
+            i = 0
+            while i < self.size:
+                if col[i] != "0":
+                    start = i
+                    while i < self.size and col[i] != "0":
+                        i += 1
+                    if i - start >= 3:
+                        down.append({"square": start*self.size+j, "word": col[start:i]})
+                else:
+                    i += 1
+
+        # Return dictionary of words
+        return word_dict
+    
+    def get_clues_with_directions(self, database = dict(), reps = 3, cutoff = 0):
+        return {direction: 
+                [
+                    (word['square'], 
+                        *max(
+                            [random.choice(
+                                [d for d in database.get(word['word'], [['', 0]]) if d[1] >= cutoff] if
+                                len([d for d in database.get(word['word'], [['', 0]]) if d[1] >= cutoff]) > 0 else
+                                [['', 0]]
+                            ) for _ in range(reps)], 
+                            key=lambda x: x[1])
+                        # if database.get(word['word'], [['', 0]])[0][1] != 0 else ''
+                    ) 
+                for word in words] for direction, words in self.get_words_with_directions().items()}
+
 
 def save_to_file(data, file_name):
     with open(file_name, 'wb') as f:
@@ -159,29 +208,7 @@ def get_word(lst):
 
 crossword_size = 7
 
-if not os.path.exists('clue_words.pickle'):
-    clues = pd.read_table('clues.tsv', error_bad_lines=False).values.tolist()
-    print(len(clues))
-    clues = [c for c in clues if 3 <= len(get_word(c)) <= crossword_size]
-    print(len(clues))
-    clues = [c for c in clues if False not in [l in string.ascii_lowercase for l in get_word(c)]]
-    print(len(clues))
-words = read_from_file('clue_words.pickle', lambda: set(get_word(c) for c in clues))
-# clue_words.update(*string.ascii_lowercase)
-# empty_padded = read_from_file('empty_padded_clue_words.pickle', lambda:None) 
-# # every word less than crossword_size is padded with empty squares
-# # so [cat, parks, star] when crossword_size is 5 becomes [cat00, 0cat0, 00cat, parks0, 0parks, star0, 0star]
-# if empty_padded is None:
-#     empty_padded = []
-#     for word in words:
-#         if len(word) < crossword_size:
-#             temp_word = word
-#             while len(temp_word) <= crossword_size:
-#                 empty_padded.append(temp_word + Crossword.empty * (crossword_size - len(temp_word)))
-#                 temp_word = Crossword.empty + temp_word
-#         else:
-#             empty_padded.append(word)
-#     save_to_file(empty_padded, 'empty_padded_clue_words.pickle')
+starts_with_cache = {}
 
 def starts_with_count(inp, blank):
     start = inp[:inp.index(blank)]
@@ -189,25 +216,17 @@ def starts_with_count(inp, blank):
         starts_with_cache[inp] = len([c for c in word_length_map[len(inp)] if c.startswith(start)])
     return starts_with_cache[inp]
 
-starts_with_cache = dict()
-words.update(*string.ascii_lowercase)
-word_length_map = {i: [c for c in words if len(c) == i] for i in range(3, crossword_size + 1)}
-word_length_map.update({1: list(string.ascii_lowercase)})
-
-def generate_crossword(base: Crossword, level=0, dictionary=words):
-    # print(f'{level}',end='')
-    # base.print()
-    # print()
+def generate_crossword(base: Crossword, level=0):
     if level == base.size: # exit condition
         return base
     if '?' not in base.at_level(level): # if the row is already filled, skip it
         return generate_crossword(base, level + 1)
     if base.size == 7:
-        rand = 200 if level == 0 else 1600 # number of words to randomly select from clue_words to test
-        grab = 10 if level == 0 else 800 # number of highest-scoring words to grab from the random selection
+        rand = 200 if level == 0 else 4000 # number of words to randomly select from clue_words to test
+        grab = 10 if level == 0 else 200 # number of highest-scoring words to grab from the random selection
         grab = -grab
     elif base.size == 5:
-        rand = 1 if level == 0 else 1600
+        rand = 1 if level == 0 else 2000
         grab = 1 if level == 0 else 800
         grab = -grab
     
@@ -249,37 +268,73 @@ def generate_crossword(base: Crossword, level=0, dictionary=words):
         return generate_crossword(base, level)
     return generate_crossword(base, level + 1)
 
-filename = input('Enter src: ')
-with open(filename, 'r') as f:
-    templates = json.load(f)
-if 'success' in filename:
-    thresh = 0.1
-    templates = [c for [c, v] in templates.items() if v[0] >= thresh]
-print(templates, len(templates))
-dest = input('Enter dest: ')
-time.sleep(3)
-
 if __name__ == '__main__':
+    with open('words.json', 'r') as f:
+        data = json.load(f)
+    words = set()
+
+    color = ColorText()
+    cprint = color.print
+    filename = input('Enter src: ')
+    with open(filename, 'r', encoding='utf-8') as f:
+        templates = json.load(f)
+    if 'success' in filename:
+        thresh = 0.1
+        templates = [c for [c, v] in templates.items() if v[0] >= thresh]
+    print(templates, len(templates))
+    dest = input('Enter dest: ')
+    year = input('Enter cutoff year: ')
+    size = int(input('Enter crossword size: '))
+    words = set(w for w, c in data.items() if 
+                len(max(c if c else [['', 0]], key=lambda s:(s[1] if s else 0))) > 0 and
+                max(c if c else [['', 0]], key=lambda s:(s[1] if s else 0))[1] >= int(year))
+    print(f'Loaded {len(words)} words')
+    words = set(w for w in words if 3 <= len(w) <= size)
+    words = set(w for w in words if False not in [l in string.ascii_lowercase for l in w])
+    starts_with_cache = dict()
+    # print(words)
+    print(f'Using {len(words)} words')
+    words.update(*string.ascii_lowercase)
+    word_length_map = {i: [c for c in words if len(c) == i] for i in range(3, crossword_size + 1)}
+    word_length_map.update({1: list(string.ascii_lowercase)})
+    dest = f'{dest.replace(".txt", "")}_{year}.txt'
+
+    with open(dest, 'a') as f:
+        f.write('')
     i = len(list(open(dest, 'r')))
+    i0 = i
+    i00 = i
     attempts = 0
-    start = int(time.time() * 100)
+    start = int(time.time() * 1000)
+    start0 = start
     # templates = {t: [0, 0] for t in templates}
+    batch = []
     while True:
         attempts += 1
         t = random.choice(list(templates))
-        x = generate_crossword(Crossword(t))
-        # templates[t][1] += 1
+        x = generate_crossword(Crossword(t), 0)
         if x.is_valid(words):
-            # templates[t][0] += 1
+            i += 1
             save = start
-            start = int(time.time() * 100)
-            print(f'\n{{attempts = {attempts}}} ({(start - save) / 100:.2}s elapsed, avg: {int((start - save) / attempts)}ms)')
-            with open(dest, 'a') as f:
-                i += 1
-                print(f'Crossword #{i:,}:')
-                [print(f'\t\t{x.data[i*x.size:(i+1)*x.size]}') for i in range(x.size)]
-                f.write(x.data + '\n')
+            start = int(time.time() * 1000)
+            if i % 5 == 0:
+                print(f'\n{{cache_size = {len(starts_with_cache.keys())}}}')
+                print(f'{{attempts = {attempts}, avg_time: {int((start - save) / attempts)}ms}}')
+                print(f'({(i - i0) / (start - start0) * 1000:.4} crosswords/sec, n = {i - i0})')
+                cprint(f'Crossword #$! {i:,} $W0. (+{i - i00:,})$0 :')
+                [cprint(f'\t\t{x.data[i*x.size:(i+1)*x.size]}'.replace('0', '$d .$0 ')) for i in range(x.size)]
+                if i % 1000 == 0:
+                    i0 = i
+                    start0 = start
+            batch.append(x.data)
             attempts = 0
+            if len(batch) == 100:
+                cprint('\n$g Saving last 100 crosswords to $! ' + dest + '$. ...')
+                with open(dest, 'a') as f:
+                    f.write('\n'.join(batch) + '\n')
+                cprint('$y Continuing...')
+                batch = []
+
             # with open('templates\medium_success_rate.json', 'w') as f:
             #     json.dump({i: [v[0] / max(v[1], 1), v[1]] for i, v in templates.items()}, f)
                 

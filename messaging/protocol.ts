@@ -113,7 +113,7 @@ class ProtocolClass {
 
 const Protocol = new ProtocolClass(
     [
-        'request host $username $privacy $cwSize $capacity', // to-do: warn logic
+        'request host $username $privacy $difficulty $cwSize $capacity', // to-do: warn logic
         'success host $roomInfo_success_host',
         'error host $errorMsg',
         'warn host $warnMsg',
@@ -134,10 +134,12 @@ const Protocol = new ProtocolClass(
         'broadcast crossword $roomInfo_broadcast_crossword',
         'error crossword $errorMsg',
 
-        'broadcast hintLetter $timeToHint $hintLetter $roomInfo_broadcast_hintLetter',
+        'broadcast disconnect $roomInfo_broadcast_disconnect',
+
+        'broadcast hintLetter $timeToHint $hintSquare $hintLetter $roomInfo_broadcast_hintLetter',
 
         'post verifycw $crossword',
-        'broadcast end $timeToEnd $roomInfo_broadcast_end',
+        'broadcast verifycw $roomInfo_broadcast_end',
         'error verifycw $errorMsg',
 
         'post close',
@@ -147,7 +149,8 @@ const Protocol = new ProtocolClass(
         'dev get all',
         'reply dev $data'
     ], {
-        username: (value: string) => value.length > 0 && /^[a-zA-Z0-9]+$/.test(value),
+        username: (value: string) => value.length > 2 && value.length <= 16 && /^[a-zA-Z0-9]+$/.test(value),
+        difficulty: (value: string) => value == 'easy' || value == 'medium' || value == 'hard',
         privacy: (value: string) => value == 'public' || value == 'private',
         cwSize: (value: string) => value == 'mini' || value == 'medium' || value == 'max',
         capacity: (value: string) => parseInt(value) > 1 && parseInt(value) <= 16,

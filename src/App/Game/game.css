@@ -1,0 +1,142 @@
+canvas {
+    background-color: #000;
+    border: 1px solid white;
+    display: block;
+    margin: 0 auto;
+    margin-top: 10px;
+    width: 630px;
+    height: 630px;
+}
+
+.main-container {
+    display: flex;
+    flex-direction: row;
+    justify-content: center; /* center horizontally */
+    align-items: center; /* center vertically */
+    position: relative; /* change position to relative */
+    max-width: 100vw;
+    height: fit-content;
+  }
+  
+  .main-container-flex {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: fit-content;
+    max-width: 200vw;
+    height: fit-content;
+    padding-top: 18vh;
+    margin: 0 auto; /* center horizontally using margin */
+  }
+
+.game-sidebar-container {
+    width: 40vw;
+    height: auto;
+    margin-left: 4vw;
+    display: flex;
+    flex-direction: column;
+}
+
+.clues-container.top {
+    background-color: #040404;
+    width: 100%;
+    height: 100%;
+    margin-bottom: 2%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr;
+    color: white;
+    border: 5px solid white;
+    border-radius: 20px;
+    -webkit-border-radius: 20px;
+    -moz-border-radius: 20px;
+    -ms-border-radius: 20px;
+    -o-border-radius: 20px;
+    overflow: hidden;
+}
+
+.clues-container .across.header,.across.clues-container {
+    margin: 15px 0 0 30px;
+}
+
+.clues-container .down.header,.down.clues-container {
+    margin: 15px 0 0 30px;
+}
+
+.clues-container .header {
+    font-family: 'Coolvetica Rg', sans-serif;
+    font-size: 2.5em;
+    text-underline-position: under;
+    text-decoration: underline;
+    text-decoration-color: white;
+    -moz-text-decoration-color: #000;
+    text-underline-offset: -0.1em;
+    text-decoration-thickness: 0.1em;
+    -moz-text-decoration-color: white;
+}
+
+.down.header
+{
+    grid-area: 2 / 3 / 1 / 2;
+}
+
+.square, .clue-text {
+    font-family: 'FreeSans';
+    font-size: 1.5em;
+}
+
+.square {
+    font-weight: 700;
+}
+
+.clue {
+    display: flex;
+    margin-bottom: .75em;
+}
+
+.clues-container {
+    width: 90%;
+    min-width: 90%;
+}
+
+.clue-text {
+    padding-left: 1em;
+}
+
+.leaderboard {
+    flex: 1 0 1;
+    background-color: greenyellow;
+    width: 100%;
+    height: 5em;
+}
+
+.game-header {
+    height: 3vw;
+    width: 630px;
+    max-width: 630px;
+    height: fit-content;
+    margin: 0 auto;
+    display: inline-block;
+    background-color: lightblue;
+    font-size: 1.625em;
+    font-family: 'FreeSans';
+    
+}
+
+.game-header p {
+    padding: 1.5%;
+    padding-left: 2.5%;
+    margin: 0 auto;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.arrow {
+    margin: 0;
+    transform: translateY(15%);
+    -webkit-transform: translateY(15%);
+    -moz-transform: translateY(15%);
+    -ms-transform: translateY(15%);
+    -o-transform: translateY(15%);
+}

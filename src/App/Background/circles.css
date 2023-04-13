@@ -1,0 +1,43 @@
+.bgcircle {
+    position: fixed;
+    top: -17.5vw;
+    left: -17.5vw;
+    animation: spin 500s infinite linear;
+    -webkit-animation: spin 500s infinite linear;
+    width: 75vw;
+    height: 75vw;
+    opacity: 0.5;
+}
+
+.bgcircle2 {
+    position: fixed;
+    top: 2.5vw;
+    right: -12.5vw;
+    animation: spin 500s infinite linear reverse;
+    -webkit-animation: spin 500s infinite linear reverse;
+    width: 70vw;
+    height: 70vw;
+    opacity: 0.5;
+}
+
+@keyframes spin {
+    from {
+      transform: rotate(0deg);
+      -webkit-transform: rotate(0deg);
+      -moz-transform: rotate(0deg);
+      -ms-transform: rotate(0deg);
+      -o-transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+        -webkit-transform: rotate(360deg);
+        -moz-transform: rotate(360deg);
+        -ms-transform: rotate(360deg);
+        -o-transform: rotate(360deg);
+    }
+}
+
+.invert {
+    filter: invert(100%);
+    -webkit-filter: invert(100%);
+}

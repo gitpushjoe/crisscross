@@ -77,6 +77,7 @@ io.on('connection', (socket: any) => {
                         const res = RoomMan.createRoom(message.username as string, 
                             cookie.authId, 
                             message.privacy as string, 
+                            message.difficulty as string,
                             message.cwSize as string, 
                             parseInt(message.capacity as string),
                             socket);
@@ -116,6 +117,18 @@ io.on('connection', (socket: any) => {
                         if (res) socket.emit('response', res);
                         break;
                     }
+                    case 'crossword': {
+                        const res = RoomMan.submitCrossword(cookie.authId, message.crossword as string);
+                        console.log(`Responding: ${JSON.stringify(res, null, 4)}`);
+                        if (res) socket.emit('response', res);
+                        break;
+                    }
+                    case 'verifycw': {
+                        const res = RoomMan.verifyCrossword(cookie.authId, message.crossword as string);
+                        console.log(`Responding: ${JSON.stringify(res, null, 4)}`);
+                        if (res) socket.emit('response', res);
+                        break;
+                    }
                 }
                 break;
             }
@@ -132,6 +145,7 @@ io.on('connection', (socket: any) => {
     });
 
     socket.on('disconnect', () => {
+        RoomMan.disconnect(cookie.authId, socket);
         console.log('Client disconnected');
     });
 });

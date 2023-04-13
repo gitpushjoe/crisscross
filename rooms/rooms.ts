@@ -4,6 +4,7 @@ import { message } from "../messaging/protocol";
 import crypto from 'crypto';
 import { Protocol } from '../messaging/protocol'
 import { Scheduler, Task, Order } from '../utils/scheduling/scheduler';
+import { CrosswordPuzzle, HintLetter, Clue, exampleCrossword, randomCrossword, hideLetters, generateHint } from './crossword/crossword';
 
 function errorMsg(topic: string, msg: string): message {
     return {
@@ -26,16 +27,8 @@ interface RoomPlayer {
     publicId: string;
     connected: boolean;
     completed: boolean;
-    crossword: Crossword;
-}
-
-interface Crossword {
-    crossword: string;
-    clues?: {
-        across: string[];
-        down: string[];
-    },
-    solution?: string;
+    score: number;
+    crossword: CrosswordPuzzle;
 }
 
 interface Room {
@@ -44,7 +37,8 @@ interface Room {
     privacy?: 'public' | 'private';
     cwSize?: 'mini' | 'medium' | 'max';
     active?: Boolean;
-    crossword?: Required<Crossword>|null;
+    crossword?: Required<CrosswordPuzzle>|null;
+    endTimeStamp?: number;
     players?: RoomPlayer[];
 }
 
@@ -87,7 +81,7 @@ interface SocketType {
 class RoomManager {
     private _players: PlayerMap = new PlayerMap();
     private _rooms: Map<string, Required<Room>> = new Map();
-    private _scheduler: Scheduler = new Scheduler();
+    private _schedulers: Scheduler = new Scheduler();
     constructor(
         private _capacity: number,
         private _broadcast: (roomCode: string, message: message) => void = () => {},
@@ -145,7 +139,7 @@ class RoomManager {
         }
     }
 
-    public createRoom(username: string, authId: string, privacy: string, cwSize: string, capacity: number, socket: SocketType): message {
+    public createRoom(username: string, authId: string, privacy: string, difficulty: string, cwSize: string, capacity: number, socket: SocketType): message {
         if (this._atCapacity()) {
             return errorMsg('host', 'Server is at capacity.');
         }
@@ -170,18 +164,20 @@ class RoomManager {
             cwSize,
             active: false,
             crossword: null,
+            endTimeStamp: 0,
             players: [{
                 username,
                 publicId: this._getPublicIdFromAuth(authId, socket.id),
                 connected: true,
                 completed: false,
+                score: 0,
                 crossword: {crossword: ''}
             }]
         });
         this._players.setRoomCode(authId, roomCode);
         console.log(this._rooms, this._players);
         socket.join(roomCode);
-        this._scheduler.makeThread(roomCode);
+        this._schedulers.makeThread(roomCode);
         return Protocol.parse('success host {}', this._rooms.get(roomCode)) as message;
     }
 
@@ -204,6 +200,7 @@ class RoomManager {
             publicId: this._getPublicIdFromAuth(authId, socket?.id),
             connected: true,
             completed: false,
+            score: 0,
             crossword: {crossword: ''}
         });
         this._players.setRoomCode(authId, roomCode);
@@ -224,7 +221,7 @@ class RoomManager {
         if (!room) {
             return errorMsg('close', 'Room does not exist.');
         }
-        this._scheduler.destroyThread(room.roomCode);
+        this._schedulers.destroyThread(room.roomCode);
         this._deleteRoom(room.roomCode);
         return null;
     }
@@ -249,6 +246,18 @@ class RoomManager {
         return null;
     }
 
+    public disconnect(authId: string, socket: SocketType): void {
+        const room = this.getRoomFromAuth(authId);
+        if (room) {
+            const playerIndex = this._getPlayerIndex(authId);
+            if (playerIndex != -1 && playerIndex != undefined) {
+                room.players[playerIndex].connected = false;
+                this._broadcast(room.roomCode, Protocol.parse('broadcast disconnect {}', room) as message);
+            }
+            this._removeRoomIfEmpty(room!.roomCode);
+        }
+    }
+
     public startGame(authId: string, beginCountdown: string): message|null {
         if (!this._getRoomCodeFromAuth(authId)) {
             return errorMsg('start', 'You are not in a room.');
@@ -267,12 +276,12 @@ class RoomManager {
             return errorMsg('start', 'Game has already started.');
         }
         if (beginCountdown == 'true') {
-            if (this._scheduler.getThread(room.roomCode)!.agendaLength > 0)
+            if (this._schedulers.getThread(room.roomCode)!.agendaLength > 0)
                 return errorMsg('start', 'Game is already starting.')
             else
-                this._scheduler.getThread(room.roomCode)?.push(new Task(() => this._beginStartCountdown(room.roomCode, 5000)));
+                this._schedulers.getThread(room.roomCode)?.push(new Task(() => this._beginStartCountdown(room.roomCode, 5000)));
         } else {
-            this._scheduler.getThread(room.roomCode)?.push(new Order(() => this._cancelStartCountdown(room.roomCode)));
+            this._schedulers.getThread(room.roomCode)?.push(new Order(() => this._cancelStartCountdown(room.roomCode)));
         }
         return null;
     }
@@ -281,11 +290,17 @@ class RoomManager {
         if (this._rooms.get(roomCode)!.active) {
             return;
         }
-        this._broadcast(roomCode, Protocol.parse(`broadcast start ${countdown} {}`, this._rooms.get(roomCode)) as message);
         if (countdown == 0) {
-            this._rooms.get(roomCode)!.active = true;
-            return;
+            const room = this._rooms.get(roomCode);
+            room!.active = true;
+            room!.endTimeStamp = Date.now() + 5 * 60 * 1000;
+            room!.crossword = randomCrossword();
+            const answer = room!.crossword.crossword;
+            this._schedulers.getThread(roomCode)?.push(new Order(() => this._gameLoop(roomCode, 250, 30, 0, null, answer)));
+            room!.players.forEach(player => player.crossword = hideLetters(room!.crossword!));
+            room!.crossword.crossword = hideLetters(room!.crossword).crossword;
         }
+        this._broadcast(roomCode, Protocol.parse(`broadcast start ${countdown} {}`, this._rooms.get(roomCode)) as message);
         return new Task(() => this._beginStartCountdown(roomCode, countdown - 1000), 1000);
     }
 
@@ -296,20 +311,110 @@ class RoomManager {
         this._broadcast(roomCode, Protocol.parse('broadcast start -1 {}', this._rooms.get(roomCode)) as message);
     }
 
+    private _gameLoop(roomCode: string, msPerLoop: number, secondsPerHint: number, secondsSinceStart: number, hint: HintLetter|null, answer: string): Task|void {
+        if (!this._rooms.get(roomCode)!.active) {
+            return;
+        }
+        if (this._rooms.get(roomCode)!.endTimeStamp < Date.now()) {
+            this._endGame(roomCode);
+            return;
+        }
+        const moduloSeconds = secondsSinceStart % secondsPerHint;
+        if (moduloSeconds >= secondsPerHint - 11 && Number.isInteger(secondsSinceStart)) {
+            if (!hint && moduloSeconds >= secondsPerHint - 3) {
+                const room = this._rooms.get(roomCode);
+                hint = generateHint(room!.players.forEach(player => player.crossword!)!, room!.crossword!.hints!, answer);
+            }
+            const secondsUntilHint = secondsPerHint - moduloSeconds - 1;
+            const {square, letter} = hint || {square: -1, letter: ''};
+            if (hint && moduloSeconds >= secondsPerHint - 1) {
+                this._rooms.get(roomCode)!.crossword!.hints.push(hint);
+                hint = null;
+            }
+            this._broadcast(roomCode, Protocol.parse(`broadcast hintLetter ${secondsUntilHint * 1000} ${square} ${letter} {}`, this._rooms.get(roomCode)) as message);
+        }
+        return new Task(() => this._gameLoop(roomCode, msPerLoop, secondsPerHint, secondsSinceStart + msPerLoop / 1000, hint, answer), msPerLoop);
+    }
+
+    public submitCrossword(authId: string, crossword: string): message|null {
+        if (!this._getRoomCodeFromAuth(authId)) {
+            return errorMsg('submit', 'You are not in a room.');
+        }
+        const room = this.getRoomFromAuth(authId);
+        if (!room) {
+            return errorMsg('submit', 'Room does not exist.');
+        }
+        if (!room.active) {
+            return errorMsg('submit', 'Game has not started.');
+        }
+        const playerIndex = this._getPlayerIndex(authId);
+        if (playerIndex == -1 || playerIndex == undefined) {
+            return errorMsg('submit', 'You are not in this room.');
+        }
+        room.players[playerIndex].crossword.crossword = crossword.replace(/[a-zA-Z]/g, '!');
+        this._broadcast(room.roomCode, Protocol.parse('broadcast crossword {}', room) as message);
+        return null;
+    }
+
+    public verifyCrossword(authId: string, crossword: string): message|null {
+        if (!this._getRoomCodeFromAuth(authId)) {
+            return errorMsg('verify', 'You are not in a room.');
+        }
+        const room = this.getRoomFromAuth(authId)!;
+        if (!room) {
+            return errorMsg('verify', 'Room does not exist.');
+        }
+        if (!room.active) {
+            return errorMsg('verify', 'Game has not started.');
+        }
+        const playerIndex = this._getPlayerIndex(authId);
+        if (playerIndex == -1 || playerIndex == undefined) {
+            return errorMsg('verify', 'You are not in this room.');
+        }
+        if (room.players[playerIndex].completed) {
+            return errorMsg('verify', 'You have already completed the crossword.');
+        }
+        crossword = crypto.createHash('sha256').update(crossword).digest('hex');
+        if (crossword == room.crossword!.solution) {
+            room.players[playerIndex].score += 1;
+            room.players[playerIndex].completed = true;
+            room.endTimeStamp = Math.min(room.endTimeStamp, Date.now() + 30 * 1000);
+            this._broadcast(room.roomCode, Protocol.parse('broadcast verifycw {}', room) as message);
+        }
+        if (room.players.every(player => player.completed)) {
+            this._endGame(room.roomCode);
+        }
+        return null;
+    }
+
+    private _endGame(roomCode: string): void {
+        const room = this._rooms.get(roomCode)!;
+        room.active = false;
+        room.crossword = {
+            crossword: '',
+            hints: [],
+            solution: '',
+            clues: {
+                across: [],
+                down: [],
+            }
+        };
+        room.endTimeStamp = -1;
+        room.players.forEach(player => {player.completed = false; })
+        this._broadcast(roomCode, Protocol.parse('broadcast start -1 {}', this._rooms.get(roomCode)) as message);
+    }
+
     public get getRooms(): Required<Room>[] { // dev only
         return [...this._rooms.values()];
     }
     public get getPlayers() { // dev only
         return [...this._players.data.entries()];
     }
-    public get getScheduler() { // dev only
-        return [...this._scheduler.threads];
-    }
     public dev_status(): message { // dev only
-        return Protocol.parse('reply dev {}', {rooms: this.getRooms, players: this.getPlayers, threads: this.getScheduler}) as message;
+        return Protocol.parse('reply dev {}', {rooms: this.getRooms, players: this.getPlayers}) as message;
     }
 }
 
 export { RoomManager };
-export type { Room, RoomPlayer, Crossword };
+export type { Room, RoomPlayer, CrosswordPuzzle as Crossword };
 
