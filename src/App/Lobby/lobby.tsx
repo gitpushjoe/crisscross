@@ -2,6 +2,7 @@ import './lobby.css';
 import { FaPlus, FaLongArrowAltRight as FaJoin } from 'react-icons/fa';
 import { useState, useRef } from 'react';
 import User from '../../../user/types';
+import Modal from '../Modal/modal';
 
 const Lobby = (props: {theme: any, user: User, username: string}) => {
     const {theme, username} = props;
@@ -10,7 +11,7 @@ const Lobby = (props: {theme: any, user: User, username: string}) => {
     const difficulty = useRef<any>(null);
     const size = useRef<any>(null);
     const maxPlayers = useRef<any>(null);
-    const emit = () => {
+    const host = () => {
         props.user.emit(`request host ${username} ${privacy!.current!.value!} ${difficulty!.current!.value!} ${size!.current!.value!} ${maxPlayers!.current!.value!}`);
     }
     return <>
@@ -61,7 +62,7 @@ const Lobby = (props: {theme: any, user: User, username: string}) => {
                     <option value="16">16</option>
                 </select>
             </p>
-            <div className={`host ${theme ? '' : 'invert'}`} onClick={emit}>Host!</div>
+            <div className={`host ${theme ? '' : 'invert'}`} onClick={host}>Host!</div>
         </div> : <></>}
     </>;
 }

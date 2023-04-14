@@ -8,12 +8,12 @@ const Game = () => {
                 <div className="game-container">
                     <div className="game-header">
                         <p>
-                        <b>5</b><FiArrowRight className="arrow"/>&nbsp;Provincial capital in the Dominican Republic.
+                        <b>5<FiArrowRight className="arrow"/></b>&nbsp;Provincial capital in the Dominican Republic.
                         </p>
                     </div>
                     <canvas id="canvas"></canvas>
                 </div>
-                <div className="game-sidebar-container">
+                <div className="game-info-container">
                     <div className="top clues-container">
                         <div className="across header">Across</div>
                             <div className="across clues-container">
